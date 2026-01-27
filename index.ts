@@ -1,52 +1,3 @@
-function eventHandler(event: Event) {
-  console.log(event.type);
-}
-
-interface EditableChildOptions {
-  tag?: keyof HTMLElementTagNameMap;
-  initialText?: string;
-  className?: string;
-  placeholder?: string;
-}
-
-function createEditableChild(
-  parent: HTMLElement,
-  options: EditableChildOptions = {},
-): HTMLElement {
-  const { tag = "div", initialText = "", className, placeholder } = options;
-
-  const child = document.createElement(tag);
-  child.contentEditable = "true";
-  child.spellcheck = true;
-
-  if (className) child.className = className;
-  if (initialText) child.textContent = initialText;
-
-  if (placeholder) {
-    child.dataset.placeholder = placeholder;
-
-    const updatePlaceholderVisibility = () => {
-      child.classList.toggle(
-        "is-empty",
-        child.textContent?.trim().length === 0,
-      );
-    };
-
-    child.addEventListener("input", updatePlaceholderVisibility);
-    updatePlaceholderVisibility();
-  }
-
-  parent.appendChild(child);
-  return child;
-}
-
-function updatePlaceholderVisibility(editorElement: HTMLElement) {
-  editorElement?.classList.toggle(
-    "is-empty",
-    editorElement.textContent?.trim().length === 0,
-  );
-}
-
 type TEditorOptions = {
   container?: string;
   className?: string;
@@ -65,19 +16,49 @@ function Editor(options?: TEditorOptions) {
     className,
     initialContent = "<p><br></p>",
     placeholderText = "Write something...",
-  } = options
-    ? options
-    : {
-        container: "#editor-container",
-      };
+  }: TEditorOptions = options ? options : {};
 
   const editorContainer = document.querySelector(container) as HTMLElement;
   let editorElement: HTMLElement | null = null;
+  let activeElement: HTMLElement | null = null;
 
   if (!editorContainer) {
     throw new Error(
       `No container with \`${container}\` query selector exists.`,
     );
+  }
+
+  function handleEditorElementInput() {
+    editorElement?.classList.toggle(
+      "is-empty",
+      editorElement.textContent?.trim().length === 0,
+    );
+  }
+
+  function handleEditorElementBlur() {
+    activeElement = null;
+  }
+
+  function handleEditorElementKeyup() {
+    const selection = window.getSelection();
+
+    if (!selection || selection.rangeCount === 0) return null;
+
+    const range = selection.getRangeAt(0);
+    let node: Node | null = range.startContainer;
+
+    // If caret is inside a text node, move to its parent element
+    if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
+
+    if (!node) return null;
+
+    // Traverse upward until we reach a direct child of the editable root
+    while (node && node.parentElement !== editorElement) {
+      node = node.parentElement;
+    }
+
+    if (node && node.parentElement === editorElement)
+      activeElement = node as HTMLElement;
   }
 
   return {
@@ -86,35 +67,35 @@ function Editor(options?: TEditorOptions) {
 
       editorElement.contentEditable = "true";
       editorElement.id = id;
+      editorElement.style.padding = "10px";
       if (className) editorElement.className = className;
       if (initialContent) editorElement.innerHTML = initialContent;
       if (placeholderText) {
         editorElement.dataset.placeholder = placeholderText;
-        updatePlaceholderVisibility(editorElement);
+        handleEditorElementInput();
       }
       editorContainer.appendChild(editorElement);
 
-      // editorElement.addEventListener("focus", function () {
-      //   if (editorElement) {
-      //     editorElement.innerHTML = "<p><br></p>";
-      //   }
-      // });
-      editorElement.addEventListener("input", function () {
-        if (editorElement) {
-          updatePlaceholderVisibility(editorElement);
-        }
-      });
-      editorElement.addEventListener("blur", eventHandler);
+      editorElement.addEventListener("input", handleEditorElementInput);
+      editorElement.addEventListener("keyup", handleEditorElementKeyup);
+      editorElement.addEventListener("blur", handleEditorElementBlur);
     },
     distroy() {
-      // editorElement.removeEventListener("focus", eventHandler);
-      // editorElement.removeEventListener("blur", eventHandler);
+      if (editorElement) {
+        editorElement.removeEventListener("input", handleEditorElementInput);
+        editorElement.removeEventListener("keyup", handleEditorElementKeyup);
+        editorElement.removeEventListener("blur", handleEditorElementBlur);
+
+        editorElement.remove();
+
+        console.log(editorElement);
+      }
     },
   };
 }
 
 const editor = Editor({
-  initialContent: "Hello, World!",
+  // initialContent: "Hello, World!",
 });
 editor.initiate();
 // editor.distroy();
